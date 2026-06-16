@@ -1,22 +1,220 @@
-<!doctype html><html><head><meta charset="utf-8"><title>OMR V2 Calibração</title>
-<style>body{font-family:Arial;margin:20px}label{display:block;margin:8px 0}input[type=range]{width:300px}</style>
-</head><body>
-<h1>OMR V2 - Calibração da Grade</h1>
-<p>Use os controles para ajustar a grade até coincidir com as bolhas.</p>
-<label>Deslocamento X <input id=x type=range min=-100 max=100 value=0 oninput="u()"><span id=xv>0</span></label>
-<label>Deslocamento Y <input id=y type=range min=-100 max=100 value=0 oninput="u()"><span id=yv>0</span></label>
-<label>Espaçamento Horizontal <input id=h type=range min=20 max=60 value=34 oninput="u()"><span id=hv>34</span></label>
-<label>Espaçamento Vertical <input id=v type=range min=20 max=60 value=38 oninput="u()"><span id=vv>38</span></label>
-<button onclick="salvar()">Salvar calibração</button>
-<pre id=out></pre>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>OMR V2 - Calibração Visual Integrada</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--ink:#111827;--line:#d1d5db;--ok:#16a34a;--bad:#dc2626;--blue:#2563eb;--warn:#ca8a04}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+header{position:sticky;top:0;z-index:10;background:#111827;color:white;padding:12px 14px;box-shadow:0 2px 10px #0005}
+header h1{margin:0;font-size:18px}
+header small{color:#d1d5db}
+main{max-width:1120px;margin:auto;padding:12px}
+.card{background:white;border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #0001}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button,label.filebtn{border:0;border-radius:10px;background:#111827;color:white;padding:12px 14px;font-weight:700;cursor:pointer;display:inline-block}
+button.blue{background:var(--blue)} button.ok{background:var(--ok)} button.secondary{background:#e5e7eb;color:#111827}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=file]{display:none}
+.badge{display:inline-block;border-radius:999px;padding:5px 9px;background:#e5e7eb;font-size:12px;font-weight:700}
+.badge.ok{background:#dcfce7;color:#166534}.badge.bad{background:#fee2e2;color:#991b1b}.badge.warn{background:#fef3c7;color:#854d0e}
+.hint{font-size:13px;color:#6b7280;line-height:1.35}
+#cameraBox{display:none;position:relative;background:#000;border-radius:14px;overflow:hidden}
+video{width:100%;display:block}
+.canvasWrap{width:100%;overflow:auto;background:#e5e7eb;border-radius:12px;border:1px solid var(--line)}
+canvas{max-width:100%;height:auto;display:block;margin:auto;background:#fff}
+.controls{display:grid;grid-template-columns:180px 1fr 70px;gap:10px;align-items:center}
+.controls input[type=range]{width:100%}
+pre{white-space:pre-wrap;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px}
+@media(max-width:760px){.controls{grid-template-columns:1fr}.row>*{flex:1 1 100%}button,label.filebtn{text-align:center;width:100%}}
+</style>
+</head>
+<body>
+<div style="position:fixed;top:8px;right:8px;z-index:99999;background:#dc2626;color:white;padding:8px 12px;border-radius:10px;font-weight:800">OMR-V2 INTEGRADA</div>
+<header>
+<h1>OMR V2 - Calibração Visual Integrada</h1>
+<small>Carregue uma foto, corrija a perspectiva e ajuste a grade em tempo real.</small>
+</header>
+
+<main>
+<section class="card">
+  <div class="row">
+    <span id="status" class="badge warn">Aguardando imagem</span>
+    <span id="markerStatus" class="badge">Marcadores: --</span>
+    <span id="gridStatus" class="badge">Grade: --</span>
+  </div>
+  <p class="hint">Agora a calibração aparece sobre a imagem corrigida. Use os controles até os círculos coloridos ficarem exatamente em cima das bolhas do cartão.</p>
+</section>
+
+<section class="card">
+  <div class="row">
+    <button class="blue" id="openCamera">Abrir câmera</button>
+    <button class="ok" id="captureBtn" disabled>Fotografar</button>
+    <button class="secondary" id="closeCamera" disabled>Fechar câmera</button>
+    <label class="filebtn" for="fileInput">Enviar imagem</label>
+    <input id="fileInput" type="file" accept="image/*">
+    <button class="secondary" id="processBtn" disabled>Processar imagem</button>
+  </div>
+  <div id="cameraBox" style="margin-top:12px"><video id="video" autoplay playsinline></video></div>
+</section>
+
+<section class="card">
+  <h2 style="margin-top:0">Ajuste da grade</h2>
+  <div class="controls"><label>Deslocamento X</label><input id="offsetX" type="range" min="-150" max="150" value="0"><b id="offsetXv">0</b></div>
+  <div class="controls"><label>Deslocamento Y</label><input id="offsetY" type="range" min="-150" max="150" value="0"><b id="offsetYv">0</b></div>
+  <div class="controls"><label>Espaçamento horizontal</label><input id="xStep" type="range" min="30" max="75" value="54"><b id="xStepv">54</b></div>
+  <div class="controls"><label>Espaçamento vertical</label><input id="yStep" type="range" min="25" max="55" value="38"><b id="yStepv">38</b></div>
+  <div class="controls"><label>Primeira bolha X</label><input id="firstX" type="range" min="30" max="190" value="133"><b id="firstXv">133</b></div>
+  <div class="controls"><label>Primeira linha Y</label><input id="firstY" type="range" min="50" max="180" value="102"><b id="firstYv">102</b></div>
+  <div class="row" style="margin-top:12px">
+    <button class="ok" id="saveCal">Salvar calibração</button>
+    <button class="secondary" id="loadCal">Carregar calibração</button>
+    <button class="secondary" id="resetCal">Resetar</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2 style="margin-top:0">Imagem corrigida + grade ajustável</h2>
+  <p class="hint">Se os círculos azuis não estiverem sobre as bolhas, ajuste os controles acima. A grade muda em tempo real.</p>
+  <div class="canvasWrap"><canvas id="warped"></canvas></div>
+</section>
+
+<section class="card">
+  <h2 style="margin-top:0">Imagem original</h2>
+  <div class="canvasWrap"><canvas id="preview"></canvas></div>
+</section>
+
+<section class="card">
+  <h2 style="margin-top:0">Valores da calibração</h2>
+  <pre id="diag">Nenhuma calibração.</pre>
+</section>
+</main>
+
 <script>
-function u(){
-xv.textContent=x.value;yv.textContent=y.value;hv.textContent=h.value;vv.textContent=v.value;
-out.textContent=JSON.stringify({offsetX:+x.value,offsetY:+y.value,hStep:+h.value,vStep:+v.value},null,2);
+const $=id=>document.getElementById(id);
+const video=$('video'), preview=$('preview'), pctx=preview.getContext('2d',{willReadFrequently:true});
+const warped=$('warped'), wctx=warped.getContext('2d',{willReadFrequently:true});
+let stream=null,currentImage=null,lastWarpedImage=null,lastMarkers=null;
+const W=1600,H=620;
+
+function setStatus(t,cls='warn'){const e=$('status');e.textContent=t;e.className='badge '+cls}
+function setMarker(t,cls=''){const e=$('markerStatus');e.textContent=t;e.className='badge '+cls}
+function setGrid(t,cls=''){const e=$('gridStatus');e.textContent=t;e.className='badge '+cls}
+function val(id){return +$(id).value}
+function updateLabels(){
+  ['offsetX','offsetY','xStep','yStep','firstX','firstY'].forEach(id=>$(id+'v').textContent=$(id).value);
+  $('diag').textContent=JSON.stringify(getCal(),null,2);
 }
-function salvar(){
-localStorage.setItem('omr_calibracao',out.textContent);
-alert('Calibração salva');
+function getCal(){
+  return {offsetX:val('offsetX'),offsetY:val('offsetY'),xStep:val('xStep'),yStep:val('yStep'),firstX:val('firstX'),firstY:val('firstY')};
 }
-u();
-</script></body></html>
+function setCal(c){
+  for(const k of ['offsetX','offsetY','xStep','yStep','firstX','firstY']) if(c[k]!==undefined) $(k).value=c[k];
+  updateLabels(); redrawGrid();
+}
+function drawPreview(img){
+  const max=1200,s=Math.min(1,max/Math.max(img.width,img.height));
+  preview.width=Math.round(img.width*s);preview.height=Math.round(img.height*s);
+  pctx.drawImage(img,0,0,preview.width,preview.height);
+}
+function imgToCanvas(img,maxSide=1800){
+  const s=Math.min(1,maxSide/Math.max(img.width,img.height));
+  const c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+  c.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,c.width,c.height);
+  return c;
+}
+function gray(data,x,y){const i=(y*data.width+x)*4,d=data.data;return .299*d[i]+.587*d[i+1]+.114*d[i+2]}
+function findMarkers(canvas){
+  const ctx=canvas.getContext('2d',{willReadFrequently:true}),id=ctx.getImageData(0,0,canvas.width,canvas.height),w=id.width,h=id.height;
+  const visited=new Uint8Array(w*h),cand=[],minDim=Math.min(w,h),minSide=Math.max(14,minDim*.012),maxSide=minDim*.15;
+  for(let y=0;y<h;y+=2)for(let x=0;x<w;x+=2){
+    const idx=y*w+x;if(visited[idx]||gray(id,x,y)>70)continue;
+    let st=[[x,y]],n=0,sx=0,sy=0,minx=x,maxx=x,miny=y,maxy=y;visited[idx]=1;
+    while(st.length){
+      const [cx,cy]=st.pop();n++;sx+=cx;sy+=cy;minx=Math.min(minx,cx);maxx=Math.max(maxx,cx);miny=Math.min(miny,cy);maxy=Math.max(maxy,cy);
+      for(const [nx,ny] of [[cx+2,cy],[cx-2,cy],[cx,cy+2],[cx,cy-2]]){
+        if(nx<0||ny<0||nx>=w||ny>=h)continue;const ni=ny*w+nx;if(visited[ni])continue;visited[ni]=1;if(gray(id,nx,ny)<70)st.push([nx,ny]);
+      }
+    }
+    const bw=maxx-minx+1,bh=maxy-miny+1,area=n*4,ratio=bw/bh,fill=area/(bw*bh);
+    if(bw>=minSide&&bh>=minSide&&bw<=maxSide&&bh<=maxSide&&ratio>.65&&ratio<1.45&&fill>.45)cand.push({x:sx/n,y:sy/n,w:bw,h:bh,area,side:(bw+bh)/2,minx,miny,maxx,maxy});
+  }
+  return pickBestQuad(cand,canvas);
+}
+function validateQuad(m,canvas){
+  if(!m)return false;const pts=[m.tl,m.tr,m.br,m.bl];
+  if(new Set(pts.map(p=>Math.round(p.x/8)+','+Math.round(p.y/8))).size<4)return false;
+  const wt=Math.hypot(m.tr.x-m.tl.x,m.tr.y-m.tl.y),wb=Math.hypot(m.br.x-m.bl.x,m.br.y-m.bl.y),hl=Math.hypot(m.bl.x-m.tl.x,m.bl.y-m.tl.y),hr=Math.hypot(m.br.x-m.tr.x,m.br.y-m.tr.y);
+  const minDim=Math.min(canvas.width,canvas.height);
+  return Math.min(wt,wb)>minDim*.45 && Math.min(hl,hr)>minDim*.22;
+}
+function pickBestQuad(cand,canvas){
+  cand=cand.sort((a,b)=>b.area-a.area).slice(0,30);let best=null,bestScore=-Infinity;
+  for(let a=0;a<cand.length-3;a++)for(let b=a+1;b<cand.length-2;b++)for(let c=b+1;c<cand.length-1;c++)for(let d=c+1;d<cand.length;d++){
+    const arr=[cand[a],cand[b],cand[c],cand[d]];
+    const tl=arr.reduce((p,q)=>q.x+q.y<p.x+p.y?q:p,arr[0]),tr=arr.reduce((p,q)=>q.x-q.y>p.x-p.y?q:p,arr[0]),bl=arr.reduce((p,q)=>q.x-q.y<p.x-p.y?q:p,arr[0]),br=arr.reduce((p,q)=>q.x+q.y>p.x+p.y?q:p,arr[0]);
+    const m={tl,tr,br,bl,candidates:cand.length};if(!validateQuad(m,canvas))continue;
+    const area=Math.abs((tl.x*tr.y+tr.x*br.y+br.x*bl.y+bl.x*tl.y)-(tl.y*tr.x+tr.y*br.x+br.y*bl.x+bl.y*tl.x))/2;
+    if(area>bestScore){bestScore=area;best=m}
+  }
+  return best;
+}
+function drawMarkersOnPreview(canvas,m){
+  drawPreview(currentImage);const sx=preview.width/canvas.width,sy=preview.height/canvas.height;
+  pctx.strokeStyle='#16a34a';pctx.lineWidth=4;pctx.font='18px Arial';pctx.fillStyle='#16a34a';
+  [['TL',m.tl],['TR',m.tr],['BR',m.br],['BL',m.bl]].forEach(([lab,p])=>{pctx.strokeRect((p.x-p.w/2)*sx,(p.y-p.h/2)*sy,p.w*sx,p.h*sy);pctx.fillText(lab,p.x*sx+8,p.y*sy)});
+}
+function homography(src,dst){
+  const A=[],b=[];for(let i=0;i<4;i++){const x=src[i].x,y=src[i].y,u=dst[i].x,v=dst[i].y;A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}
+  for(let i=0;i<8;i++){let max=i;for(let r=i+1;r<8;r++)if(Math.abs(A[r][i])>Math.abs(A[max][i]))max=r;[A[i],A[max]]=[A[max],A[i]];[b[i],b[max]]=[b[max],b[i]];const piv=A[i][i]||1e-12;for(let j=i;j<8;j++)A[i][j]/=piv;b[i]/=piv;for(let r=0;r<8;r++)if(r!==i){const f=A[r][i];for(let j=i;j<8;j++)A[r][j]-=f*A[i][j];b[r]-=f*b[i]}}
+  return [b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],1];
+}
+function applyH(H,x,y){const d=H[6]*x+H[7]*y+H[8];return{x:(H[0]*x+H[1]*y+H[2])/d,y:(H[3]*x+H[4]*y+H[5])/d}}
+function warp(canvas,m){
+  warped.width=W;warped.height=H;const sctx=canvas.getContext('2d',{willReadFrequently:true}),src=sctx.getImageData(0,0,canvas.width,canvas.height),out=wctx.createImageData(W,H);
+  const Hinv=homography([{x:0,y:0},{x:W-1,y:0},{x:W-1,y:H-1},{x:0,y:H-1}],[m.tl,m.tr,m.br,m.bl]);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const p=applyH(Hinv,x,y),sx=Math.max(0,Math.min(canvas.width-1,Math.round(p.x))),sy=Math.max(0,Math.min(canvas.height-1,Math.round(p.y))),si=(sy*canvas.width+sx)*4,oi=(y*W+x)*4;out.data[oi]=src.data[si];out.data[oi+1]=src.data[si+1];out.data[oi+2]=src.data[si+2];out.data[oi+3]=255}
+  wctx.putImageData(out,0,0);lastWarpedImage=wctx.getImageData(0,0,W,H);
+}
+function redrawGrid(){
+  updateLabels();
+  if(!lastWarpedImage){setGrid('Grade: carregue e processe uma imagem','warn');return}
+  wctx.putImageData(lastWarpedImage,0,0);
+  const c=getCal(),starts=[1,14,27,40],colFirst=[c.firstX,c.firstX+390,c.firstX+780,c.firstX+1170];
+  wctx.lineWidth=3;wctx.font='20px Arial';
+  for(let col=0;col<4;col++){
+    const fx=colFirst[col]+c.offsetX;
+    for(let r=0;r<13;r++){
+      const q=starts[col]+r,y=c.firstY+c.offsetY+r*c.yStep;
+      wctx.fillStyle='rgba(220,38,38,.95)';wctx.fillText(String(q).padStart(2,'0'),fx-65,y+7);
+      for(let i=0;i<5;i++){
+        const x=fx+i*c.xStep;
+        wctx.strokeStyle='rgba(37,99,235,.95)';wctx.beginPath();wctx.arc(x,y,15,0,Math.PI*2);wctx.stroke();
+        wctx.fillStyle='rgba(37,99,235,.18)';wctx.beginPath();wctx.arc(x,y,5,0,Math.PI*2);wctx.fill();
+      }
+    }
+  }
+  setGrid('Grade: ajustável','ok');
+}
+function processImage(img){
+  currentImage=img;drawPreview(img);const c=imgToCanvas(img),m=findMarkers(c);
+  if(!m){setStatus('Falhou: 4 marcadores não encontrados','bad');setMarker('Marcadores: 0/4','bad');return}
+  drawMarkersOnPreview(c,m);warp(c,m);redrawGrid();setStatus('Imagem corrigida. Ajuste a grade agora.','ok');setMarker('Marcadores: 4/4','ok');
+}
+['offsetX','offsetY','xStep','yStep','firstX','firstY'].forEach(id=>$(id).addEventListener('input',redrawGrid));
+$('saveCal').onclick=()=>{localStorage.setItem('omrV2Cal',JSON.stringify(getCal()));alert('Calibração salva')};
+$('loadCal').onclick=()=>{const c=JSON.parse(localStorage.getItem('omrV2Cal')||'null');if(c)setCal(c);else alert('Nenhuma calibração salva')};
+$('resetCal').onclick=()=>setCal({offsetX:0,offsetY:0,xStep:54,yStep:38,firstX:133,firstY:102});
+$('fileInput').onchange=e=>{const f=e.target.files[0];if(!f)return;const img=new Image();img.onload=()=>{currentImage=img;drawPreview(img);$('processBtn').disabled=false;setStatus('Imagem carregada','ok')};img.src=URL.createObjectURL(f)};
+$('processBtn').onclick=()=>{if(currentImage)processImage(currentImage)};
+$('openCamera').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});video.srcObject=stream;await video.play().catch(()=>{});$('cameraBox').style.display='block';$('captureBtn').disabled=false;$('closeCamera').disabled=false;setStatus('Câmera aberta','ok')}catch(e){alert('Não foi possível abrir a câmera: '+e.message)}};
+$('closeCamera').onclick=()=>{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('cameraBox').style.display='none';$('captureBtn').disabled=true;$('closeCamera').disabled=true};
+$('captureBtn').onclick=()=>{const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);const img=new Image();img.onload=()=>{currentImage=img;processImage(img)};img.src=c.toDataURL('image/jpeg',.95)};
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{})}
+if(window.caches){caches.keys().then(keys=>keys.forEach(k=>caches.delete(k))).catch(()=>{})}
+updateLabels();
+</script>
+</body>
+</html>

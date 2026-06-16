@@ -1,8 +1,6 @@
 {
-  "name": "OMR-V1 Calibração Visual",
-  "short_name": "OMR-V1",
-  "start_url": "./index.html?omr-v1",
-  "display": "standalone",
-  "theme_color": "#111827",
-  "background_color": "#f3f4f6"
+  "name": "OMR V2 Calibração Visual Integrada",
+  "short_name": "OMR-V2",
+  "start_url": "./index.html?v=2-integrada",
+  "display": "standalone"
 }
